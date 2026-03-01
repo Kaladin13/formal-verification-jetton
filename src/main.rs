@@ -14,6 +14,7 @@ use std::{
     time::Duration,
 };
 use tokio::{process::Command, sync::RwLock, time::timeout};
+use tower_http::services::ServeDir;
 
 struct AppState {
     cache: RwLock<HashMap<String, serde_json::Value>>,
@@ -189,14 +190,18 @@ async fn main() {
         java_home: java_home.clone(),
     });
 
+    let frontend_dir = env::var("FRONTEND_DIR").unwrap_or_else(|_| "./frontend".to_string());
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/analyze", get(analyze))
-        .with_state(state);
+        .with_state(state)
+        .fallback_service(ServeDir::new(&frontend_dir));
 
     let bind_addr = format!("0.0.0.0:{}", port);
     println!("Starting tsa-jettons-server on {}", bind_addr);
     println!("  JAR path: {}", jar_path);
+    println!("  Frontend: {}", frontend_dir);
     println!(
         "  JAVA_HOME: {}",
         java_home.as_deref().unwrap_or("(system default)")

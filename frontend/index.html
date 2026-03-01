@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formal Jetton Analyzer</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M28 56a28 28 0 1 0 0-56 28 28 0 0 0 0 56Z' fill='%230098EA'/%3E%3Cpath d='M37.56 15.6H18.44c-3.4 0-5.18 3.88-2.94 6.4l12.1 13.6a1.8 1.8 0 0 0 2.68.08l.08-.08 12.1-13.6c2.26-2.52.48-6.4-2.9-6.4ZM27.12 33.2l-3.6-4.08 7.2-8.72v11.44a1.16 1.16 0 0 1-1.96.84l-1.64-1.84Zm-5.68-6.44-4.28-4.8a1.8 1.8 0 0 1 1.28-3.16h8.76l-5.76 7.96Zm13.92-7.96h8.76a1.8 1.8 0 0 1 1.36 3.04l-.08.08-4.28 4.84-5.76-7.96Z' fill='%23fff'/%3E%3C/svg%3E" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e17;
+            color: #e1e4ea;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 720px;
+            width: 100%;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 12px 16px;
+            background: #151a26;
+            border: 1px solid #2a3040;
+            border-radius: 8px;
+            color: #e1e4ea;
+            font-size: 14px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-box input::placeholder {
+            color: #4b5563;
+        }
+
+        .search-box input:focus {
+            border-color: #3b82f6;
+        }
+
+        .search-box button {
+            padding: 12px 24px;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .search-box button:hover {
+            background: #2563eb;
+        }
+
+        .search-box button:disabled {
+            background: #1e3a5f;
+            cursor: not-allowed;
+        }
+
+        /* Loader */
+        .loader-wrapper {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 48px 0;
+        }
+
+        .loader-wrapper.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #1e293b;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loader-text {
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .loader-timer {
+            font-size: 28px;
+            font-weight: 700;
+            color: #3b82f6;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Results */
+        .result {
+            display: none;
+        }
+
+        .result.active {
+            display: block;
+        }
+
+        .error-box {
+            background: #1c1117;
+            border: 1px solid #7f1d1d;
+            border-radius: 10px;
+            padding: 20px;
+            color: #fca5a5;
+            font-size: 14px;
+        }
+
+        .error-box .error-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #f87171;
+        }
+
+        .report-card {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .report-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        .report-header .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            margin-bottom: 6px;
+        }
+
+        .report-header .address {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            color: #93c5fd;
+            word-break: break-all;
+        }
+
+        .report-header .code-hash {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        .checks {
+            padding: 8px 0;
+        }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 24px;
+            border-bottom: 1px solid #1a2030;
+        }
+
+        .check-row:last-child {
+            border-bottom: none;
+        }
+
+        .check-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .check-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #e1e4ea;
+        }
+
+        .check-desc {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.safe {
+            background: #052e16;
+            color: #4ade80;
+            border: 1px solid #166534;
+        }
+
+        .badge.danger {
+            background: #2a0a0a;
+            color: #f87171;
+            border: 1px solid #7f1d1d;
+        }
+
+        .badge.warning {
+            background: #1c1508;
+            color: #fbbf24;
+            border: 1px solid #78350f;
+        }
+
+        .blacklist-section {
+            padding: 14px 24px;
+            border-top: 1px solid #1a2030;
+        }
+
+        .blacklist-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #f87171;
+            margin-bottom: 8px;
+        }
+
+        .blacklist-addr {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            color: #fca5a5;
+            background: #1c1117;
+            padding: 6px 10px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+
+        .verdict {
+            margin-top: 16px;
+            padding: 16px 24px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .verdict.clean {
+            background: #052e16;
+            border: 1px solid #166534;
+            color: #4ade80;
+        }
+
+        .verdict.suspicious {
+            background: #2a0a0a;
+            border: 1px solid #7f1d1d;
+            color: #f87171;
+        }
+
+        .raw-toggle {
+            margin-top: 16px;
+            text-align: center;
+        }
+
+        .raw-toggle button {
+            background: none;
+            border: 1px solid #2a3040;
+            color: #6b7280;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .raw-toggle button:hover {
+            border-color: #3b82f6;
+            color: #93c5fd;
+        }
+
+        .raw-json {
+            display: none;
+            margin-top: 12px;
+            background: #0d1117;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            color: #9ca3af;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .raw-json.active {
+            display: block;
+        }
+
+        footer {
+            margin-top: 48px;
+            text-align: center;
+            font-size: 12px;
+            color: #374151;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .footer-links a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: #151a26;
+            border: 1px solid #2a3040;
+            transition: all 0.2s;
+        }
+
+        .footer-links a:hover {
+            border-color: #3b82f6;
+            background: #1a2236;
+        }
+
+        .footer-links a svg {
+            width: 18px;
+            height: 18px;
+            fill: #6b7280;
+            transition: fill 0.2s;
+        }
+
+        .footer-links a:hover svg {
+            fill: #93c5fd;
+        }
+
+        footer .powered-by a {
+            color: #4b5563;
+            text-decoration: none;
+        }
+
+        footer .powered-by a:hover {
+            color: #93c5fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TSA Jetton Analyzer</h1>
+            <p class="subtitle">Formal verification of TEP-74 jetton contracts via symbolic execution</p>
+        </header>
+
+        <div class="search-box">
+            <input type="text" id="addressInput" placeholder="Jetton minter address (raw format)" />
+            <button id="analyzeBtn" onclick="analyze()">Analyze</button>
+        </div>
+
+        <div class="loader-wrapper" id="loader">
+            <div class="spinner"></div>
+            <span class="loader-text">Running symbolic analysis...</span>
+            <span class="loader-timer" id="timer">60s</span>
+        </div>
+
+        <div class="result" id="result"></div>
+
+        <footer>
+            <div class="footer-links">
+                <a href="https://t.me/lagus_research" target="_blank" title="Telegram">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.98 1.26-5.61 3.7-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.88.03-.24.37-.49 1.02-.74 3.99-1.74 6.65-2.89 7.99-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.54.17.14.12.18.28.2.47-.01.06.01.24 0 .38z"/></svg>
+                </a>
+                <a href="https://github.com/Kaladin13/formal-verification-jetton" target="_blank" title="GitHub">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+                </a>
+            </div>
+            <div class="powered-by">
+                <a href="https://esprito.com/tsa/" target="_blank">Powered by TSA symbolic engine</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const input = document.getElementById('addressInput');
+        const btn = document.getElementById('analyzeBtn');
+        const loader = document.getElementById('loader');
+        const result = document.getElementById('result');
+        const timerEl = document.getElementById('timer');
+        let timerInterval = null;
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') analyze();
+        });
+
+        async function analyze() {
+            const address = input.value.trim();
+            if (!address) {
+                input.focus();
+                return;
+            }
+
+            btn.disabled = true;
+            result.className = 'result';
+            loader.className = 'loader-wrapper active';
+            startTimer();
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/analyze?address=${encodeURIComponent(address)}`);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    console.error('Analysis error:', data);
+                    showError('Cannot fetch contract state');
+                    return;
+                }
+
+                showReport(data);
+            } catch (err) {
+                console.error('Network error:', err);
+                showError('Cannot fetch contract state');
+            } finally {
+                stopTimer();
+                btn.disabled = false;
+                loader.className = 'loader-wrapper';
+            }
+        }
+
+        function showError(message) {
+            result.innerHTML = `
+                <div class="error-box">
+                    <div class="error-title">${escapeHtml(message)}</div>
+                </div>
+            `;
+            result.className = 'result active';
+        }
+
+        function showReport(data) {
+            const checks = [
+                {
+                    key: 'hasHiddenTransferFee',
+                    name: 'Hidden Transfer Fee',
+                    desc: 'Balance decreases by more than the transfer amount',
+                    invert: true,
+                },
+                {
+                    key: 'hasConditionalBlocking',
+                    name: 'Conditional Blocking',
+                    desc: 'Unauthorized opcodes can modify wallet state',
+                    invert: true,
+                },
+                {
+                    key: 'hasGetterIntegrityViolation',
+                    name: 'Getter Integrity',
+                    desc: 'get_wallet_data() returns actual storage values',
+                    invert: true,
+                },
+            ];
+
+            const hasBlacklist = data.blacklistedAddresses && data.blacklistedAddresses.length > 0;
+            const hasDanger = checks.some(c => data[c.key]) || hasBlacklist;
+
+            let checksHtml = checks.map(c => {
+                const flagged = data[c.key];
+                const badgeClass = flagged ? 'danger' : 'safe';
+                const badgeText = flagged ? 'Flagged' : 'OK';
+                return `
+                    <div class="check-row">
+                        <div class="check-info">
+                            <span class="check-name">${c.name}</span>
+                            <span class="check-desc">${c.desc}</span>
+                        </div>
+                        <span class="badge ${badgeClass}">${badgeText}</span>
+                    </div>
+                `;
+            }).join('');
+
+            let blacklistHtml = '';
+            if (hasBlacklist) {
+                blacklistHtml = `
+                    <div class="blacklist-section">
+                        <div class="blacklist-title">Blacklisted addresses (${data.blacklistedAddresses.length})</div>
+                        ${data.blacklistedAddresses.map(a => `<div class="blacklist-addr">${escapeHtml(a)}</div>`).join('')}
+                    </div>
+                `;
+            } else {
+                checksHtml = `
+                    <div class="check-row">
+                        <div class="check-info">
+                            <span class="check-name">Address Blacklist</span>
+                            <span class="check-desc">No hardcoded transfer restrictions found</span>
+                        </div>
+                        <span class="badge safe">OK</span>
+                    </div>
+                ` + checksHtml;
+            }
+
+            if (hasBlacklist) {
+                checksHtml = `
+                    <div class="check-row">
+                        <div class="check-info">
+                            <span class="check-name">Address Blacklist</span>
+                            <span class="check-desc">Hardcoded addresses blocked from transfers</span>
+                        </div>
+                        <span class="badge danger">${data.blacklistedAddresses.length} blocked</span>
+                    </div>
+                ` + checksHtml;
+            }
+
+            const verdictClass = hasDanger ? 'suspicious' : 'clean';
+            const verdictText = hasDanger
+                ? 'Potential honeypot detected'
+                : 'No honeypot indicators found';
+
+            result.innerHTML = `
+                <div class="report-card">
+                    <div class="report-header">
+                        <div class="label">Analyzed contract</div>
+                        <div class="address">${escapeHtml(data.analyzedAddress)}</div>
+                        <div class="code-hash">wallet code hash: ${escapeHtml(data.jettonWalletCodeHashBase64)}</div>
+                    </div>
+                    <div class="checks">
+                        ${checksHtml}
+                    </div>
+                    ${blacklistHtml}
+                </div>
+                <div class="verdict ${verdictClass}">${verdictText}</div>
+                <div class="raw-toggle">
+                    <button onclick="toggleRaw()">Show raw JSON</button>
+                </div>
+                <pre class="raw-json" id="rawJson">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+            `;
+            result.className = 'result active';
+        }
+
+        function toggleRaw() {
+            const el = document.getElementById('rawJson');
+            el.classList.toggle('active');
+        }
+
+        function startTimer() {
+            let seconds = 60;
+            timerEl.textContent = seconds + 's';
+            timerInterval = setInterval(() => {
+                seconds--;
+                if (seconds <= 0) {
+                    clearInterval(timerInterval);
+                    timerEl.textContent = '...';
+                } else {
+                    timerEl.textContent = seconds + 's';
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

@@ -28,8 +28,11 @@ COPY --from=builder /build/target/release/tsa-jettons-server ./tsa-jettons-serve
 #     ./gradlew :tsa-jettons:shadowJar
 COPY tsa-jettons.jar ./tsa-jettons.jar
 
+COPY frontend/ ./frontend/
+
 ENV TSA_JAR_PATH=/app/tsa-jettons.jar
 ENV JAVA_HOME=/opt/java/openjdk
+ENV FRONTEND_DIR=/app/frontend
 ENV PORT=8080
 
 USER app
