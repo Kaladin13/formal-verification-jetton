@@ -1,0 +1,3 @@
+target/
+# tsa-jettons.jar
+.env
