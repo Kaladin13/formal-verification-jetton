@@ -6,6 +6,13 @@ Project uses [TSA](https://tonsec.dev/docs) tool as engine runtime for Tolk chec
 
 Symbolic cross-contract checkers are the core part of the project as they define the underlying logic.
 
+## Project structure
+
+[Checkers](./checkers/) contains Tolk bindings and formal theorems in form of smart contracts and their get methods.
+[Runtime](./runtime/) contains Kotlin wrappers for checkers.
+
+The rest of the project is a simple Rust server. 
+
 ## Architecture
 
 ```
