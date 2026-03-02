@@ -1,10 +1,12 @@
 # Ton Jettons formal verification
 
-HTTP server for TON jetton honeypot analysis. Wraps the symbolic analyzer as a REST API with in-memory caching.
+Ton Jettons formal verification based on TVM symbolic execution. Uses HTTP server for TON jetton honeypot analysis. Wraps the symbolic analyzer as a REST API with in-memory caching.
 
 Project uses [TSA](https://tonsec.dev/docs) tool as engine runtime for Tolk checkers.
 
 Symbolic cross-contract checkers are the core part of the project as they define the underlying logic.
+
+JVM runtime is heavily based on [tsa-jettons](https://github.com/espritoxyz/tsa/tree/master/tsa-jettons/src/main). They use FunC checkers, to run them with Tolk you will need to configure checker to operate with BoC raw. 
 
 ## Project structure
 
