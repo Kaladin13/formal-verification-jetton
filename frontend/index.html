@@ -600,7 +600,7 @@
                 },
             ];
 
-            const hasBlacklist = data.blacklistedAddresses && data.blacklistedAddresses.length > 0;
+            const hasBlacklist = (data.blacklistedAddresses && data.blacklistedAddresses.length > 0) || data.allTransfersBlocked;
             const errors = data.errors || [];
             const hasDanger = checks.some(c => data[c.key]) || hasBlacklist;
 
@@ -632,21 +632,28 @@
             const blacklistError = errors.some(e => e.toLowerCase().includes('blacklist'));
             let blacklistHtml = '';
             if (hasBlacklist) {
+                const addrCount = data.blacklistedAddresses ? data.blacklistedAddresses.length : 0;
+                const badgeText = data.allTransfersBlocked ? 'All could be blocked' : `${addrCount} blocked`;
+                const blDesc = data.allTransfersBlocked
+                    ? 'All transfers could be blocked regardless of destination'
+                    : 'Hardcoded addresses blocked from transfers';
                 checksHtml = `
                     <div class="check-row">
                         <div class="check-info">
                             <span class="check-name">Address Blacklist</span>
-                            <span class="check-desc">Hardcoded addresses blocked from transfers</span>
+                            <span class="check-desc">${blDesc}</span>
                         </div>
-                        <span class="badge danger">${data.blacklistedAddresses.length} blocked</span>
+                        <span class="badge danger">${badgeText}</span>
                     </div>
                 ` + checksHtml;
-                blacklistHtml = `
-                    <div class="blacklist-section">
-                        <div class="blacklist-title">Blacklisted addresses (${data.blacklistedAddresses.length})</div>
-                        ${data.blacklistedAddresses.map(a => `<div class="blacklist-addr">${escapeHtml(a)}</div>`).join('')}
-                    </div>
-                `;
+                if (addrCount > 0) {
+                    blacklistHtml = `
+                        <div class="blacklist-section">
+                            <div class="blacklist-title">Blacklisted addresses (${addrCount})</div>
+                            ${data.blacklistedAddresses.map(a => `<div class="blacklist-addr">${escapeHtml(a)}</div>`).join('')}
+                        </div>
+                    `;
+                }
             } else {
                 const blBadge = blacklistError ? 'warning' : 'safe';
                 const blText = blacklistError ? 'Error' : 'OK';
