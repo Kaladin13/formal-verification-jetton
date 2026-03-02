@@ -1,5 +1,4 @@
 // Typed message schemas used by checker contracts.
-
 type ForwardPayloadInline = RemainingBitsAndRefs
 type ForwardPayloadRef = Cell<RemainingBitsAndRefs>
 type ForwardPayloadEither = ForwardPayloadInline | ForwardPayloadRef
@@ -15,6 +14,8 @@ struct (0x0f8a7ea5) TransferForChecks {
 }
 
 struct (0x178d4519) InternalTransferStepStandard {
+    queryId: uint64
+    amount: coins
     rest: RemainingBitsAndRefs
 }
 
@@ -31,6 +32,8 @@ struct (0x768a50b2) WithdrawJettonsStandard {
 }
 
 type AllowedTransferMessage = TransferForChecks
+
+type AllowedOutgoingMessageToTrack = InternalTransferStepStandard
 
 type AllowedStandardJettonMessage =
     | TransferForChecks

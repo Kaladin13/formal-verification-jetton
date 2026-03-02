@@ -1,19 +1,14 @@
 import "./imports/tsa_functions"
+import "helpers"
 
 const EXIT_STATE_MODIFIED = 1200
-
-fun assertAddressIsStd(addr: address) {
-    val asSlice = beginCell().storeAddress(addr).endCell().beginParse();
-    tsa_assert(asSlice.remainingBitsCount() == 267);
-    tsa_assert(asSlice.preloadUint(11) == 1024);
-}
 
 fun onInternalMessage(in: InMessage) {
     tsa_forbid_failures();
 
     val c4Before = tsa_get_c4(1);
 
-    val (_, ownerAddress, masterAddress, _) = tsa_call_4_0_wallet_data(1, 97026);
+    val (_, ownerAddress, masterAddress, _) = readWalletData();
 
     assertAddressIsStd(in.senderAddress);
     tsa_assert_not(in.senderAddress.bitsEqual(ownerAddress));
