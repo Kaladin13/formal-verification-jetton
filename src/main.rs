@@ -114,14 +114,14 @@ async fn run_analysis(
             )
         })?;
 
-    let output = timeout(Duration::from_secs(300), child.wait_with_output())
+    let output = timeout(Duration::from_secs(360), child.wait_with_output())
         .await
         .map_err(|_| {
             (
                 StatusCode::GATEWAY_TIMEOUT,
                 Json(ErrorResponse {
                     error: "analysis timed out".to_string(),
-                    details: Some("analysis exceeded 5 minute timeout".to_string()),
+                    details: Some("analysis exceeded 6 minute timeout".to_string()),
                 }),
             )
         })?
@@ -147,6 +147,12 @@ async fn run_analysis(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !stderr.is_empty() {
+        eprintln!("[analyzer stderr] {}", stderr);
+    }
+    eprintln!("[analyzer stdout] {}", stdout);
 
     // The JAR outputs JSON preceded by possible warning lines on stderr.
     // Find the JSON object in stdout (starts with '{', ends with '}').

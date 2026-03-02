@@ -9,9 +9,16 @@ Symbolic cross-contract checkers are the core part of the project as they define
 ## Project structure
 
 [Checkers](./checkers/) contains Tolk bindings and formal theorems in form of smart contracts and their get methods.
+
 [Runtime](./runtime/) contains Kotlin wrappers for checkers.
 
 The rest of the project is a simple Rust server. 
+
+## Limitations
+
+- Only tokens with **inline wallet code** can be analyzed. Tokens using library cells (e.g., USDT) return an error because the analyzer cannot resolve library cell references without a liteserver connection. (tonapi not always has them)
+- The getter integrity checker has a known **false positive rate of ~70%** on real tokens
+- Each uncached analysis spawns a JVM process (~2s startup + ~10s analysis). The in-memory cache prevents repeated work but is lost on server restart.
 
 ## Architecture
 
@@ -36,48 +43,6 @@ The analyzer uses symbolic execution to check jetton wallet contracts for:
 - **JDK 21** (JDK 24 is incompatible with the analyzer's Gradle build)
 - **tsa-jettons shadow JAR** (built from the JVM symbolic runtime monorepo)
 
-## Build
-
-### 1. Build the analyzer JAR
-
-From the monorepo root:
-
-```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
-
-./gradlew :tsa-jettons:shadowJar
-```
-
-This produces `tsa-jettons/build/libs/tsa-jettons.jar` (~94 MB fat JAR with all dependencies).
-
-Verify it works standalone:
-
-```bash
-java -jar tsa-jettons/build/libs/tsa-jettons.jar \
-  -a 0:ae5d4a0ebd6220602339d94a939f1fc7e6c444a7f5d49aa0201aa3d264fd7da3
-```
-
-### 2. Build the server
-
-```bash
-cd tsa-jettons-server
-cargo build --release
-```
-
-## Configuration
-
-Copy the example env file and adjust paths:
-
-```bash
-cp .env.example .env
-```
-
-| Variable       | Default             | Description                        |
-|----------------|---------------------|------------------------------------|
-| `TSA_JAR_PATH` | `./tsa-jettons.jar` | Path to the tsa-jettons shadow JAR |
-| `JAVA_HOME`    | system default      | JDK 21 installation path           |
-| `PORT`         | `8080`              | Server listen port                 |
-
 ## Run
 
 ```bash
@@ -90,54 +55,6 @@ Or with env vars inline:
 TSA_JAR_PATH=../tsa-jettons/build/libs/tsa-jettons.jar \
 JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home \
   cargo run --release
-```
-
-## API
-
-### `GET /health`
-
-Health check.
-
-```bash
-curl http://localhost:8080/health
-```
-
-```json
-{"status": "ok"}
-```
-
-### `GET /api/analyze?address={minter_address}`
-
-Run honeypot analysis on a jetton minter contract. The address should be in raw format (`0:hex...`).
-
-```bash
-curl "http://localhost:8080/api/analyze?address=0:ae5d4a0ebd6220602339d94a939f1fc7e6c444a7f5d49aa0201aa3d264fd7da3"
-```
-
-```json
-{
-  "analyzedAddress": "0:ae5d4a0ebd6220602339d94a939f1fc7e6c444a7f5d49aa0201aa3d264fd7da3",
-  "jettonWalletCodeHashBase64": "ImgwVG3JqxaH3HK8il7cxgIQORp8YGmMT+ImYY13jWg=",
-  "blacklistedAddresses": [],
-  "hasHiddenTransferFee": false,
-  "hasConditionalBlocking": false,
-  "hasGetterIntegrityViolation": true
-}
-```
-
-First request takes ~10s (symbolic execution). Subsequent requests for the same address are served from cache instantly.
-
-### Error responses
-
-| Status | Condition                                          |
-|--------|----------------------------------------------------|
-| 400    | Missing or empty `address` parameter               |
-| 500    | Analyzer process failed or returned invalid output |
-| 504    | Analysis exceeded 5-minute timeout                 |
-
-```json
-{"error": "address parameter required"}
-{"error": "analysis failed", "details": "...stderr..."}
 ```
 
 ## Docker
@@ -165,8 +82,3 @@ curl "http://localhost:8080/api/analyze?address=0:ae5d4a0ebd6220602339d94a939f1f
 
 The image compiles the Rust binary during build, then produces a minimal runtime with JRE 21 + the server binary + the JAR.
 
-## Limitations
-
-- Only tokens with **inline wallet code** can be analyzed. Tokens using library cells (e.g., USDT) return an error because the analyzer cannot resolve library cell references without a liteserver connection. (tonapi not always has them)
-- The getter integrity checker has a known **false positive rate of ~70%** on real tokens
-- Each uncached analysis spawns a JVM process (~2s startup + ~10s analysis). The in-memory cache prevents repeated work but is lost on server restart.

@@ -6,60 +6,63 @@ import org.ton.bytecode.TsaContractCode
 import org.ton.bytecode.setTSACheckerFunctions
 import org.usvm.FirstFailureTerminator
 import org.usvm.machine.BocAnalyzer
+import org.usvm.machine.IntercontractOptions
 import org.usvm.machine.NoAdditionalStopStrategy
 import org.usvm.machine.TvmOptions
 import org.usvm.machine.analyzeInterContract
-import kotlin.time.Duration.Companion.seconds
 import org.usvm.resolveResourcePath
 import org.usvm.test.resolver.TvmSymbolicTest
 import org.usvm.test.resolver.TvmTestFailure
 import java.nio.file.Path
 
-data class TransferFeeChecker(
+data class CrossContractFeeChecker(
     private val resourcesDir: Path?,
 ) : TvmChecker {
-    private val crossContractCheckerPath = resourcesDir.resolveResourcePath(CROSS_CONTRACT_CHECKER_PATH)
+    private val checkerPath = resourcesDir.resolveResourcePath(CHECKER_PATH)
 
     override fun findConflictingExecutions(
         contractUnderTest: TsaContractCode,
         stopWhenFoundOneConflictingExecution: Boolean,
     ): List<TvmSymbolicTest> {
-        val crossContractChecker = BocAnalyzer.loadContractFromBoc(crossContractCheckerPath)
+        val checkerContract = BocAnalyzer.loadContractFromBoc(checkerPath)
             .also { setTSACheckerFunctions(it) }
 
         val additionalStopStrategy =
-            if (stopWhenFoundOneConflictingExecution) FirstFailureTerminator() else NoAdditionalStopStrategy
+            if (stopWhenFoundOneConflictingExecution) {
+                FirstFailureTerminator()
+            } else {
+                NoAdditionalStopStrategy
+            }
 
         val analysisResult = analyzeInterContract(
-            listOf(crossContractChecker, contractUnderTest),
+            contracts = listOf(checkerContract, contractUnderTest),
             startContractId = 0,
             methodId = MethodId.ZERO,
+            additionalStopStrategy = additionalStopStrategy,
             options = TvmOptions(
                 turnOnTLBParsingChecks = false,
                 enableOutMessageAnalysis = true,
-                solverTimeout = 5.seconds,
             ),
             inputInfo = TvmInputInfo(),
-            additionalStopStrategy = additionalStopStrategy,
         )
 
         return analysisResult.tests.filter { it.result is TvmTestFailure }
     }
 
     fun getDescription(conflictingExecutions: List<TvmSymbolicTest>): ResultDescription {
-        val hasFee = conflictingExecutions.any { test ->
+        val hasCrossContractFee = conflictingExecutions.any { test ->
             check(test.result is TvmTestFailure) { "Unexpected execution: $test" }
-            (test.result as TvmTestFailure).exitCode == EXIT_CROSS_CONTRACT_FEE_DETECTED
+            (test.result as TvmTestFailure).exitCode == EXIT_CROSS_CONTRACT_FEE
         }
-        return ResultDescription(hasHiddenTransferFee = hasFee)
+        return ResultDescription(hasCrossContractFee = hasCrossContractFee)
     }
 
     data class ResultDescription(
-        val hasHiddenTransferFee: Boolean,
+        val hasCrossContractFee: Boolean,
     )
 
     companion object {
-        private const val CROSS_CONTRACT_CHECKER_PATH = "/checkers/boc/cross_contract_fee_checker.boc"
-        const val EXIT_CROSS_CONTRACT_FEE_DETECTED = 1102
+        private const val CHECKER_PATH = "/checkers/boc/cross_contract_fee_checker.boc"
+        const val EXIT_CROSS_CONTRACT_FEE = 1102
     }
 }

@@ -73,11 +73,17 @@ data class BlacklistAddressChecker(
                 firstAddress.takeLast(MSG_ADDR_MAIN_PART_LENGTH)
             }
 
-        return ResultDescription(blacklistedAddresses)
+        // If we have conflicting executions but couldn't extract any specific addresses,
+        // all transfers fail regardless of destination (e.g., missing transfer handler,
+        // universal block, or always-throwing transfer logic).
+        val allTransfersBlocked = conflictingExecutions.isNotEmpty() && blacklistedAddresses.isEmpty()
+
+        return ResultDescription(blacklistedAddresses, allTransfersBlocked)
     }
 
     data class ResultDescription(
         val blacklistedAddresses: Set<String>,
+        val allTransfersBlocked: Boolean,
     )
 
     companion object {

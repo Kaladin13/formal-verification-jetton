@@ -1,31 +1,36 @@
 package org.usvm.report
 
 import kotlinx.serialization.Serializable
+import mu.KotlinLogging
 import org.ton.bytecode.TsaContractCode
 import org.ton.extractJettonContractInfo
 import org.usvm.checkers.BlacklistAddressChecker
 import org.usvm.checkers.ConditionalBlockingChecker
-import org.usvm.checkers.GetterIntegrityChecker
 import org.usvm.checkers.TransferFeeChecker
 import org.usvm.getContractFromBytes
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.jar.JarFile
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.deleteRecursively
 import kotlin.io.path.extension
 
+private val logger = KotlinLogging.logger {}
+
 @Serializable
 data class JettonWalletPropertiesReport(
     val analyzedAddress: String,
     val jettonWalletCodeHashBase64: String,
     val blacklistedAddresses: Set<String>,
+    val allTransfersBlocked: Boolean,
     val hasHiddenTransferFee: Boolean,
     val hasConditionalBlocking: Boolean,
-    val hasGetterIntegrityViolation: Boolean,
+    val errors: List<String> = emptyList(),
 )
 
 fun runAnalysisAndCreateReport(address: String): JettonWalletPropertiesReport {
@@ -38,76 +43,89 @@ fun runAnalysisAndCreateReport(address: String): JettonWalletPropertiesReport {
             analyzedAddress = address,
             jettonWalletCodeHashBase64 = contractInfo.jettonWalletCodeHashBase64,
             blacklistedAddresses = result.blacklistedAddresses,
+            allTransfersBlocked = result.allTransfersBlocked,
             hasHiddenTransferFee = result.hasHiddenTransferFee,
             hasConditionalBlocking = result.hasConditionalBlocking,
-            hasGetterIntegrityViolation = result.hasGetterIntegrityViolation,
+            errors = result.errors,
         )
     }
 }
 
 data class FullAnalysisResult(
     val blacklistedAddresses: Set<String>,
+    val allTransfersBlocked: Boolean,
     val hasHiddenTransferFee: Boolean,
     val hasConditionalBlocking: Boolean,
-    val hasGetterIntegrityViolation: Boolean,
+    val errors: List<String> = emptyList(),
 )
 
 @OptIn(ExperimentalPathApi::class)
 fun runFullAnalysis(contract: TsaContractCode): FullAnalysisResult {
     val targetResourcesDir = makeTmpDirForResourcesForJarEnvironmentOrNull()
+    val errors = mutableListOf<String>()
+
+    val executor = Executors.newFixedThreadPool(3)
 
     try {
-        // Blacklist checker (existing)
-        val blacklistAddressChecker = BlacklistAddressChecker(targetResourcesDir)
-        val blacklistedAddressesExecutions =
-            blacklistAddressChecker.findConflictingExecutions(
-                contract,
-                stopWhenFoundOneConflictingExecution = false,
-            )
-        val blacklistedAddresses =
-            if (blacklistedAddressesExecutions.isNotEmpty()) {
-                blacklistAddressChecker.getDescription(blacklistedAddressesExecutions).blacklistedAddresses
-            } else {
-                emptySet()
+        // Launch all three checkers in parallel
+        val blacklistFuture: Future<BlacklistAddressChecker.ResultDescription> =
+            executor.submit<BlacklistAddressChecker.ResultDescription> {
+                runCatching {
+                    val checker = BlacklistAddressChecker(targetResourcesDir)
+                    val executions = checker.findConflictingExecutions(
+                        contract,
+                        stopWhenFoundOneConflictingExecution = false,
+                    )
+                    checker.getDescription(executions)
+                }.getOrElse { e ->
+                    logger.error(e) { "BlacklistAddressChecker failed" }
+                    synchronized(errors) { errors += "BlacklistAddressChecker failed: ${e.message}" }
+                    BlacklistAddressChecker.ResultDescription(emptySet(), allTransfersBlocked = false)
+                }
             }
 
-        // Transfer fee checker
-        val transferFeeChecker = TransferFeeChecker(targetResourcesDir)
-        val feeExecutions = transferFeeChecker.findConflictingExecutions(contract)
-        val hasHiddenTransferFee =
-            if (feeExecutions.isNotEmpty()) {
-                transferFeeChecker.getDescription(feeExecutions).hasHiddenTransferFee
-            } else {
+        val feeFuture: Future<Boolean> = executor.submit<Boolean> {
+            runCatching {
+                val checker = TransferFeeChecker(targetResourcesDir)
+                val executions = checker.findConflictingExecutions(contract)
+                if (executions.isNotEmpty()) {
+                    checker.getDescription(executions).hasHiddenTransferFee
+                } else {
+                    false
+                }
+            }.getOrElse { e ->
+                logger.error(e) { "TransferFeeChecker failed" }
+                synchronized(errors) { errors += "TransferFeeChecker failed: ${e.message}" }
                 false
             }
+        }
 
-        // Conditional blocking checker
-        val conditionalBlockingChecker = ConditionalBlockingChecker(targetResourcesDir)
-        val blockingExecutions = conditionalBlockingChecker.findConflictingExecutions(contract)
-        val hasConditionalBlocking =
-            if (blockingExecutions.isNotEmpty()) {
-                conditionalBlockingChecker.getDescription(blockingExecutions).hasConditionalBlocking
-            } else {
+        val blockingFuture: Future<Boolean> = executor.submit<Boolean> {
+            runCatching {
+                val checker = ConditionalBlockingChecker(targetResourcesDir)
+                val executions = checker.findConflictingExecutions(contract)
+                if (executions.isNotEmpty()) {
+                    checker.getDescription(executions).hasConditionalBlocking
+                } else {
+                    false
+                }
+            }.getOrElse { e ->
+                logger.error(e) { "ConditionalBlockingChecker failed" }
+                synchronized(errors) { errors += "ConditionalBlockingChecker failed: ${e.message}" }
                 false
             }
+        }
 
-        // Getter integrity checker
-        val getterIntegrityChecker = GetterIntegrityChecker(targetResourcesDir)
-        val getterExecutions = getterIntegrityChecker.findConflictingExecutions(contract)
-        val hasGetterIntegrityViolation =
-            if (getterExecutions.isNotEmpty()) {
-                getterIntegrityChecker.getDescription(getterExecutions).hasGetterIntegrityViolation
-            } else {
-                false
-            }
-
+        val blacklistResult = blacklistFuture.get()
         return FullAnalysisResult(
-            blacklistedAddresses = blacklistedAddresses,
-            hasHiddenTransferFee = hasHiddenTransferFee,
-            hasConditionalBlocking = hasConditionalBlocking,
-            hasGetterIntegrityViolation = hasGetterIntegrityViolation,
+            blacklistedAddresses = blacklistResult.blacklistedAddresses,
+            allTransfersBlocked = blacklistResult.allTransfersBlocked,
+            hasHiddenTransferFee = feeFuture.get(),
+            hasConditionalBlocking = blockingFuture.get(),
+            errors = errors,
         )
     } finally {
+        executor.shutdown()
         targetResourcesDir?.deleteRecursively()
     }
 }
